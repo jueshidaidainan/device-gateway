@@ -1,0 +1,18 @@
+server:
+  port: 12346
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+app:
+  tcp:
+    host: 0.0.0.0
+    port: 12345
+  batch-size: 100

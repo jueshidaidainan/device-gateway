@@ -1,0 +1,20 @@
+# Build output
+target/
+
+# VCS
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+
+# Docs not needed in image build context
+DOCKER.md
