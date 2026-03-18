@@ -18,6 +18,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
+import io.netty.handler.timeout.IdleStateHandler;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.stereotype.Component;
 
@@ -37,6 +38,8 @@ public class NettyBridgeServer implements SmartLifecycle {
     private final AppProperties properties;
     private final ConnectionManager manager;
     private final List<Channel> serverChannels = new ArrayList<>();
+
+    private static final int UNI_TCP_READ_IDLE_SECONDS = 2;
 
     private volatile boolean running;
     private NioEventLoopGroup boss;
@@ -139,6 +142,8 @@ public class NettyBridgeServer implements SmartLifecycle {
                     @Override
                     protected void initChannel(SocketChannel ch) {
                         ChannelPipeline pipeline = ch.pipeline();
+                        // 2s 无入站数据触发 idle 事件（用于单向推送通道超时关闭）
+                        pipeline.addLast(new IdleStateHandler(UNI_TCP_READ_IDLE_SECONDS, 0, 0));
                         pipeline.addLast(new StxEtxFrameDecoder(properties.getMaxFrameLength()));
                         pipeline.addLast(new UniSocketHandler(manager));
                     }
