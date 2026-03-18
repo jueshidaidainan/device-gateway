@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
 
 /**
  * 双向 WebSocket 处理器（3003）。
@@ -46,6 +48,20 @@ public final class BiWebSocketHandler extends SimpleChannelInboundHandler<TextWe
             String err = "{\"error\":\"内部错误: " + e.getMessage().replace("\"", "\\\"") + "\"}";
             ctx.channel().writeAndFlush(new TextWebSocketFrame(err));
         }
+    }
+
+    // 2s 内无入站数据：关闭连接
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
+        if (evt instanceof IdleStateEvent) {
+            IdleStateEvent e = (IdleStateEvent) evt;
+            if (e.state() == IdleState.READER_IDLE) {
+                System.out.println("双向WebSocket读超时(>2s), 关闭连接: " + ctx.channel().remoteAddress());
+                ctx.close();
+                return;
+            }
+        }
+        ctx.fireUserEventTriggered(evt);
     }
 
     // 客户端离开时移除集合并输出连接数。

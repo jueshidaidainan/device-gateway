@@ -40,6 +40,7 @@ public class NettyBridgeServer implements SmartLifecycle {
     private final List<Channel> serverChannels = new ArrayList<>();
 
     private static final int UNI_TCP_READ_IDLE_SECONDS = 2;
+    private static final int WS_READ_IDLE_SECONDS = 2;
 
     private volatile boolean running;
     private NioEventLoopGroup boss;
@@ -163,6 +164,7 @@ public class NettyBridgeServer implements SmartLifecycle {
                         pipeline.addLast(new HttpServerCodec());
                         pipeline.addLast(new HttpObjectAggregator(65536));
                         pipeline.addLast(new WebSocketServerProtocolHandler(properties.getWebSocketPath()));
+                        pipeline.addLast(new IdleStateHandler(WS_READ_IDLE_SECONDS, 0, 0));
                         pipeline.addLast(new BiWebSocketHandler(manager));
                     }
                 });
@@ -182,6 +184,7 @@ public class NettyBridgeServer implements SmartLifecycle {
                         pipeline.addLast(new HttpObjectAggregator(65536));//把分片 HTTP 消息聚合成完整消息（例如完整握手请求）。
                         //多的这两个是因为，ws 是基于 http upgrade的
                         pipeline.addLast(new WebSocketServerProtocolHandler(properties.getWebSocketPath()));
+                        pipeline.addLast(new IdleStateHandler(WS_READ_IDLE_SECONDS, 0, 0));
                         pipeline.addLast(new UniWebSocketHandler(manager));
                     }
                 });
