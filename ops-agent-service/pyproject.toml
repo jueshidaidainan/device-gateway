@@ -1,0 +1,25 @@
+[project]
+name = "ops-agent-service"
+version = "0.1.0"
+description = "LangGraph-based diagnostic agent for the device gateway observability stack."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0,<1.0.0",
+    "httpx>=0.27.0,<1.0.0",
+    "langchain-core>=0.3.0,<0.4.0",
+    "langchain-openai>=0.2.0,<0.3.0",
+    "langgraph>=0.2.0,<0.3.0",
+    "pydantic-settings>=2.5.0,<3.0.0",
+    "uvicorn[standard]>=0.30.0,<1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0,<9.0.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"

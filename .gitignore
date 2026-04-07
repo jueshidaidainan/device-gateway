@@ -5,3 +5,12 @@
 .idea/
 .vscode/
 *.iml
+__pycache__/
+.pytest_cache/
+.pytest-cache/
+pytest-cache-files-*/
+.venv/
+*.pyc
+*.pyo
+*.sqlite3
+*.db

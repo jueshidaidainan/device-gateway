@@ -32,7 +32,9 @@ public final class UniSocketHandler extends SimpleChannelInboundHandler<String> 
     protected void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
         JsonNode json = BridgeSupport.MAPPER.readTree(msg);
         if (json.has("from")) {
-            ctx.channel().attr(BridgeSupport.DEVICE_NAME_KEY).set(json.get("from").asText());
+            String deviceName = json.get("from").asText();
+            ctx.channel().attr(BridgeSupport.DEVICE_NAME_KEY).set(deviceName);
+            manager.recordUniSocketMessage(deviceName, ctx.channel());
         }
         manager.broadcastToUniWebSocket(msg);
     }
@@ -57,6 +59,7 @@ public final class UniSocketHandler extends SimpleChannelInboundHandler<String> 
         try {
             ObjectNode closed = BridgeSupport.MAPPER.createObjectNode();
             String deviceName = ctx.channel().attr(BridgeSupport.DEVICE_NAME_KEY).get();
+            manager.recordUniSocketDisconnected(deviceName, ctx.channel());
             closed.put("from", deviceName == null ? "unknown" : deviceName);
             closed.put("addr", String.valueOf(ctx.channel().remoteAddress()));
             closed.put("content", 404);
