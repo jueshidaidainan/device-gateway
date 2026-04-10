@@ -1,15 +1,15 @@
-# Ops Agent Service
+﻿# 运维智能体服务
 
-`ops-agent-service` is a LangGraph-powered diagnostic service for the device gateway project.
+`ops-agent-service` 是设备网关项目中的一个基于 LangGraph 的诊断服务。
 
-## What it does
+## 功能说明
 
-- Analyzes whether traffic fluctuations look normal or abnormal
-- Explains alerts using metrics, logs, and gateway connection state
-- Exposes Swagger-friendly HTTP APIs for interview demos and integration
-- Persists every run into SQLite for replay and auditing
+- 分析流量波动是正常变化还是异常现象
+- 结合指标、日志和网关连接状态解释告警原因
+- 提供便于通过 Swagger 调试的 HTTP API，适合联调和面试演示
+- 将每次分析结果持久化到 SQLite，便于回放和审计
 
-## Stack
+## 技术栈
 
 - Python 3.11+
 - FastAPI
@@ -17,16 +17,16 @@
 - Pydantic
 - Prometheus HTTP API
 - Loki HTTP API
-- OpenAI-compatible chat model
+- 兼容 OpenAI 接口的聊天模型
 
-## Endpoints
+## 接口列表
 
 - `POST /agent/analyze`
 - `POST /agent/explain-alert`
 - `GET /agent/health`
 - `GET /docs`
 
-## Local setup
+## 本地启动
 
 ```bash
 python -m venv .venv
@@ -36,13 +36,13 @@ copy .env.example .env
 uvicorn app.main:app --reload --port 8010
 ```
 
-## Notes
+## 说明
 
-- The service uses `LangGraph` for stateful orchestration but keeps the graph intentionally lightweight.
-- The model layer supports OpenAI-compatible endpoints so you can point it at OpenAI or compatible gateways later.
-- If the model is unavailable, the service degrades to deterministic analysis instead of returning fabricated results.
+- 服务使用 `LangGraph` 做有状态编排，但整体流程保持轻量，便于理解和扩展。
+- 模型层支持兼容 OpenAI 的接口，后续可以方便切换到 OpenAI 或其他兼容网关。
+- 当模型不可用时，服务会退化为确定性分析逻辑，而不是返回臆造结果。
 
-## Interview Guide
+## 面试资料
 
 - 中文项目说明与面试指南：`项目说明与面试指南.md`
 - 中文三分钟面试讲稿：`三分钟面试讲稿.md`

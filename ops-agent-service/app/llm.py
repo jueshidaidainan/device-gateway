@@ -154,6 +154,27 @@ class LlmGateway:
                 details={"error": str(exc)},
             )
 
+    async def ahealth(self) -> ComponentHealth:
+        if not self.enabled:
+            return ComponentHealth(name="llm", ok=False, message="LLM is not configured")
+
+        try:
+            headers = {"Authorization": f"Bearer {self.settings.llm_api_key}"}
+            async with httpx.AsyncClient(
+                base_url=self.settings.llm_base_url,
+                timeout=self.settings.request_timeout_seconds,
+            ) as client:
+                response = await client.get("/models", headers=headers)
+                response.raise_for_status()
+            return ComponentHealth(name="llm", ok=True, message="LLM endpoint is reachable")
+        except Exception as exc:  # pragma: no cover
+            return ComponentHealth(
+                name="llm",
+                ok=False,
+                message="LLM health check failed",
+                details={"error": str(exc)},
+            )
+
     def _fallback_query_understanding(
         self,
         question: str,
@@ -201,17 +222,17 @@ class LlmGateway:
             )
 
         next_steps = [
-            "Review the referenced Prometheus series in Grafana.",
-            "Inspect matching Loki logs for the same time window.",
+            "到 Grafana 中查看本次分析对应的 Prometheus 指标曲线。",
+            "检查同一时间窗口内匹配到的 Loki 日志。",
         ]
         if normalized_query.device_id:
-            next_steps.append(f"Check the gateway connection state for {normalized_query.device_id}.")
+            next_steps.append(f"确认网关中设备 {normalized_query.device_id} 的连接状态。")
 
         return DiagnosisOutput(
             summary=assessment.summary,
             is_anomalous=assessment.is_anomalous,
             confidence=assessment.confidence,
-            suspected_causes=assessment.reasons or ["No strong abnormal signal was found."],
+            suspected_causes=assessment.reasons or ["当前没有发现足够强的异常信号。"],
             evidence=evidence,
             next_steps=next_steps,
         )

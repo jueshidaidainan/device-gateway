@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -30,9 +31,10 @@ class DiagnosticDependencies:
 def build_diagnostic_graph(deps: DiagnosticDependencies):
     settings = deps.settings
 
-    def query_understanding(state: AgentState) -> dict:
+    async def query_understanding(state: AgentState) -> dict:
         # 先把自然语言问题规范成结构化查询条件，后续节点都围绕这个结果工作。
-        understanding = deps.llm.understand_query(
+        understanding = await asyncio.to_thread(
+            deps.llm.understand_query,
             question=state["question"],
             explicit_device_id=state.get("device_id"),
             explicit_topic_id=state.get("topic_id"),
@@ -65,25 +67,27 @@ def build_diagnostic_graph(deps: DiagnosticDependencies):
             "topic_id": normalized.topic_id,
         }
 
-    def fetch_metrics(state: AgentState) -> dict:
+    async def fetch_metrics(state: AgentState) -> dict:
         normalized = NormalizedQuery.model_validate(state["normalized_query"])
         try:
             # 同时查询当前窗口和前一天基线，给规则层一个最直接的对照组。
-            current_payload = deps.tools.query_prometheus.invoke(
-                {
-                    "query": normalized.metric_query,
-                    "start": normalized.time_range_start.isoformat(),
-                    "end": normalized.time_range_end.isoformat(),
-                    "step": settings.default_query_step,
-                }
-            )
-            baseline_payload = deps.tools.query_prometheus.invoke(
-                {
-                    "query": normalized.baseline_metric_query,
-                    "start": normalized.time_range_start.isoformat(),
-                    "end": normalized.time_range_end.isoformat(),
-                    "step": settings.default_query_step,
-                }
+            current_payload, baseline_payload = await asyncio.gather(
+                deps.tools.query_prometheus.ainvoke(
+                    {
+                        "query": normalized.metric_query,
+                        "start": normalized.time_range_start.isoformat(),
+                        "end": normalized.time_range_end.isoformat(),
+                        "step": settings.default_query_step,
+                    }
+                ),
+                deps.tools.query_prometheus.ainvoke(
+                    {
+                        "query": normalized.baseline_metric_query,
+                        "start": normalized.time_range_start.isoformat(),
+                        "end": normalized.time_range_end.isoformat(),
+                        "step": settings.default_query_step,
+                    }
+                ),
             )
             metrics_evidence = MetricsEvidence(
                 query=normalized.metric_query,
@@ -104,11 +108,11 @@ def build_diagnostic_graph(deps: DiagnosticDependencies):
             )
         return {"metrics_evidence": metrics_evidence.model_dump(mode="json")}
 
-    def fetch_logs(state: AgentState) -> dict:
+    async def fetch_logs(state: AgentState) -> dict:
         normalized = NormalizedQuery.model_validate(state["normalized_query"])
         try:
             # 日志只取和当前问题相关的窗口与关键词，避免把无关噪音带进总结节点。
-            payload = deps.tools.query_loki.invoke(
+            payload = await deps.tools.query_loki.ainvoke(
                 {
                     "query": normalized.log_query,
                     "start": normalized.time_range_start.isoformat(),
@@ -126,19 +130,26 @@ def build_diagnostic_graph(deps: DiagnosticDependencies):
             )
         return {"log_evidence": logs_evidence.model_dump(mode="json")}
 
-    def fetch_gateway_context(state: AgentState) -> dict:
+    async def fetch_gateway_context(state: AgentState) -> dict:
         normalized = NormalizedQuery.model_validate(state["normalized_query"])
         try:
             # 这一步补的是领域上下文，解决通用 observability 平台不了解设备在线态的问题。
-            devices_payload = deps.tools.query_gateway_ops_api.invoke({"resource": "devices"})
-            events_payload = deps.tools.query_gateway_ops_api.invoke(
-                {"resource": "events", "limit": normalized.gateway_event_limit}
-            )
-            device_payload = None
+            tasks = [
+                deps.tools.query_gateway_ops_api.ainvoke({"resource": "devices"}),
+                deps.tools.query_gateway_ops_api.ainvoke(
+                    {"resource": "events", "limit": normalized.gateway_event_limit}
+                ),
+            ]
             if normalized.device_id:
-                device_payload = deps.tools.query_gateway_ops_api.invoke(
-                    {"resource": "device_status", "device_id": normalized.device_id}
+                tasks.append(
+                    deps.tools.query_gateway_ops_api.ainvoke(
+                        {"resource": "device_status", "device_id": normalized.device_id}
+                    )
                 )
+            results = await asyncio.gather(*tasks)
+            devices_payload = results[0]
+            events_payload = results[1]
+            device_payload = results[2] if len(results) > 2 else None
             gateway_evidence = GatewayOpsEvidence(
                 overview=devices_payload.get("overview"),
                 device=device_payload.get("device") if device_payload else None,
@@ -148,7 +159,7 @@ def build_diagnostic_graph(deps: DiagnosticDependencies):
             gateway_evidence = GatewayOpsEvidence(degraded=True, error=str(exc))
         return {"gateway_evidence": gateway_evidence.model_dump(mode="json")}
 
-    def anomaly_evaluator(state: AgentState) -> dict:
+    async def anomaly_evaluator(state: AgentState) -> dict:
         # 规则层先做事实判断，避免让 LLM 直接决定“是否异常”。
         metrics_evidence = MetricsEvidence.model_validate(state["metrics_evidence"])
         logs_evidence = LogsEvidence.model_validate(state["log_evidence"])
@@ -156,14 +167,15 @@ def build_diagnostic_graph(deps: DiagnosticDependencies):
         assessment = evaluate_anomaly(metrics_evidence, logs_evidence, gateway_evidence)
         return {"anomaly_assessment": assessment.model_dump(mode="json")}
 
-    def diagnosis_writer(state: AgentState) -> dict:
+    async def diagnosis_writer(state: AgentState) -> dict:
         # 只有在证据已经齐备后才让模型做总结，保证输出有明确证据来源。
         normalized = NormalizedQuery.model_validate(state["normalized_query"])
         metrics_evidence = MetricsEvidence.model_validate(state["metrics_evidence"])
         logs_evidence = LogsEvidence.model_validate(state["log_evidence"])
         gateway_evidence = GatewayOpsEvidence.model_validate(state["gateway_evidence"])
         assessment = evaluate_anomaly(metrics_evidence, logs_evidence, gateway_evidence)
-        diagnosis = deps.llm.write_diagnosis(
+        diagnosis = await asyncio.to_thread(
+            deps.llm.write_diagnosis,
             normalized_query=normalized,
             metrics_evidence=metrics_evidence,
             logs_evidence=logs_evidence,

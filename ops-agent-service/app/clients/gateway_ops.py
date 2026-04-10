@@ -29,12 +29,45 @@ class GatewayOpsClient:
             response.raise_for_status()
             return response.json()
 
+    async def aget_devices(self) -> dict:
+        return await self._aget("/ops/devices")
+
+    async def aget_device_status(self, device_id: str) -> dict:
+        return await self._aget(f"/ops/devices/{device_id}/status")
+
+    async def aget_events(self, limit: int) -> dict:
+        return await self._aget("/ops/events", params={"limit": limit})
+
+    async def _aget(self, path: str, params: dict | None = None) -> dict:
+        if not self.base_url:
+            raise RuntimeError("Gateway ops URL is not configured")
+
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
+            response = await client.get(path, params=params)
+            response.raise_for_status()
+            return response.json()
+
     def health(self) -> ComponentHealth:
         if not self.base_url:
             return ComponentHealth(name="gateway-ops", ok=False, message="Gateway ops URL is not configured")
 
         try:
             self.get_devices()
+            return ComponentHealth(name="gateway-ops", ok=True, message="Gateway ops API is reachable")
+        except Exception as exc:  # pragma: no cover
+            return ComponentHealth(
+                name="gateway-ops",
+                ok=False,
+                message="Gateway ops API health check failed",
+                details={"error": str(exc)},
+            )
+
+    async def ahealth(self) -> ComponentHealth:
+        if not self.base_url:
+            return ComponentHealth(name="gateway-ops", ok=False, message="Gateway ops URL is not configured")
+
+        try:
+            await self.aget_devices()
             return ComponentHealth(name="gateway-ops", ok=True, message="Gateway ops API is reachable")
         except Exception as exc:  # pragma: no cover
             return ComponentHealth(
