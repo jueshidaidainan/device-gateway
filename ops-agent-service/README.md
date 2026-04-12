@@ -9,6 +9,17 @@
 - 提供便于通过 Swagger 调试的 HTTP API，适合联调和面试演示
 - 将每次分析结果持久化到 SQLite，便于回放和审计
 
+## 诊断流程
+
+相比直接看 `workflow.py` 里的节点函数，下面这张图更适合快速理解整条 LangGraph 编排链路：
+
+![运维智能体诊断流程](docs/diagnostic-workflow.svg)
+
+- `query_understanding` 先把自然语言问题规范化
+- `fetch_metrics`、`fetch_logs`、`fetch_gateway_context` 三路并行取证
+- `anomaly_evaluator` 汇总证据并做规则判断
+- `diagnosis_writer` 基于证据和判断结果生成最终诊断
+
 ## 技术栈
 
 - Python 3.11+
